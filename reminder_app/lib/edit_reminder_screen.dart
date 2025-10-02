@@ -61,27 +61,10 @@ class _EditReminderScreenState extends State<EditReminderScreen> {
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: () {
-              DateTime newDueDate;
-              if (_ledger.isNotEmpty) {
-                _ledger.sort();
-                final lastEntry = _ledger.last;
-                final parts = _recurrenceController.text.split(' ');
-                int? days;
-                if (parts.length >= 2) {
-                  days = int.tryParse(parts[1]);
-                }
-                newDueDate = (days != null)
-                    ? lastEntry.add(Duration(days: days))
-                    : widget.reminder.nextDueDate;
-              } else {
-                newDueDate = widget.reminder.nextDueDate;
-              }
-
               final updatedReminder = widget.reminder.copyWith(
                 title: _titleController.text,
                 recurrence: _recurrenceController.text,
                 ledger: _ledger,
-                nextDueDate: newDueDate,
               );
               Navigator.of(context).pop(updatedReminder);
             },
