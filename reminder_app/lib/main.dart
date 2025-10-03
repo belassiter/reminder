@@ -39,6 +39,19 @@ class ReminderListScreen extends StatefulWidget {
 }
 
 class _ReminderListScreenState extends State<ReminderListScreen> {
+  String _activeSort = 'Manual';
+  final List<String> _sortOptions = [
+    'Manual',
+    'Name (ascending)',
+    'Name (descending)',
+    'Next Due',
+    'Last Due',
+    'Most Recent',
+    'Least Recent',
+    'Most Frequent',
+    'Least Frequent',
+  ];
+
   final Stream<QuerySnapshot> _remindersStream =
       FirebaseFirestore.instance.collection('reminders').orderBy('order').snapshots();
   final TextEditingController _searchController = TextEditingController();
@@ -335,6 +348,79 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     );
   }
 
+  void _sortDocuments(List<DocumentSnapshot> docs) {
+    switch (_activeSort) {
+      case 'Name (ascending)':
+        docs.sort((a, b) => Reminder.fromFirestore(a).title.compareTo(Reminder.fromFirestore(b).title));
+        break;
+      case 'Name (descending)':
+        docs.sort((a, b) => Reminder.fromFirestore(b).title.compareTo(Reminder.fromFirestore(a).title));
+        break;
+      case 'Next Due':
+        docs.sort((a, b) => Reminder.fromFirestore(a).nextDueDate.compareTo(Reminder.fromFirestore(b).nextDueDate));
+        break;
+      case 'Last Due':
+        docs.sort((a, b) => Reminder.fromFirestore(b).nextDueDate.compareTo(Reminder.fromFirestore(a).nextDueDate));
+        break;
+      case 'Most Recent':
+        docs.sort((a, b) {
+          final aDate = Reminder.fromFirestore(a).ledger.isNotEmpty ? Reminder.fromFirestore(a).ledger.last : DateTime(1970);
+          final bDate = Reminder.fromFirestore(b).ledger.isNotEmpty ? Reminder.fromFirestore(b).ledger.last : DateTime(1970);
+          return bDate.compareTo(aDate);
+        });
+        break;
+      case 'Least Recent':
+        docs.sort((a, b) {
+          final aDate = Reminder.fromFirestore(a).ledger.isNotEmpty ? Reminder.fromFirestore(a).ledger.last : DateTime(1970);
+          final bDate = Reminder.fromFirestore(b).ledger.isNotEmpty ? Reminder.fromFirestore(b).ledger.last : DateTime(1970);
+          return aDate.compareTo(bDate);
+        });
+        break;
+      case 'Most Frequent':
+        docs.sort((a, b) {
+          final aDuration = _getRecurrenceDuration(Reminder.fromFirestore(a).recurrence);
+          final bDuration = _getRecurrenceDuration(Reminder.fromFirestore(b).recurrence);
+          return aDuration.compareTo(bDuration);
+        });
+        break;
+      case 'Least Frequent':
+        docs.sort((a, b) {
+          final aDuration = _getRecurrenceDuration(Reminder.fromFirestore(a).recurrence);
+          final bDuration = _getRecurrenceDuration(Reminder.fromFirestore(b).recurrence);
+          return bDuration.compareTo(aDuration);
+        });
+        break;
+      case 'Manual':
+      default:
+        docs.sort((a, b) => Reminder.fromFirestore(a).order.compareTo(Reminder.fromFirestore(b).order));
+        break;
+    }
+  }
+
+  int _getRecurrenceDuration(String recurrence) {
+    final rule = _parseFrequency(recurrence);
+    if (rule == null) {
+      return 99999;
+    }
+    final int number = rule['number'] as int;
+    final String unit = rule['unit'] as String;
+    if (unit == 'days') {
+      return number;
+    } else if (unit == 'weeks') {
+      return number * 7;
+    } else if (unit == 'fortnights') {
+      return number * 14;
+    } else if (unit == 'months') {
+      return number * 30; // Approximation
+    } else if (unit == 'quarters') {
+      return number * 90; // Approximation
+    } else if (unit == 'years') {
+      return number * 365; // Approximation
+    } else {
+      return 99999;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -345,16 +431,37 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'Search',
-                hintText: 'Search reminders...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(25.0)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Search',
+                      hintText: 'Search reminders...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(25.0)),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                DropdownButton<String>(
+                  value: _activeSort,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _activeSort = newValue!;
+                    });
+                  },
+                  items: _sortOptions.map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                ),
+              ],
             ),
           ),
           // Header
@@ -414,12 +521,14 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                       .contains(_searchQuery.toLowerCase());
                 }).toList();
 
+                _sortDocuments(filteredDocs);
+
                 if (filteredDocs.isEmpty) {
                   return const Center(
                       child: Text('No matching reminders found.'));
                 }
 
-                if (_searchQuery.isNotEmpty) {
+                if (_activeSort != 'Manual' || _searchQuery.isNotEmpty) {
                   return ListView(
                     children: 
                         filteredDocs.map((document) {
@@ -511,7 +620,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                     batch.commit();
                   },
                   children: 
-                      snapshot.data!.docs.map((document) {
+                      filteredDocs.map((document) {
                     final reminder = Reminder.fromFirestore(document);
                     final status = _getStatus(reminder);
                     return Card(
