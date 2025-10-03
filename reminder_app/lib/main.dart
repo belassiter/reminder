@@ -266,6 +266,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     String? recurrenceError;
     final int reminderCount = (await FirebaseFirestore.instance.collection('reminders').get()).docs.length;
 
+    if (!mounted) return;
 
     return showDialog<void>(
       context: context,

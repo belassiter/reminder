@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:reminder_app/reminder.dart';
 
 class EditReminderScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _EditReminderScreenState extends State<EditReminderScreen> {
     _titleController = TextEditingController(text: widget.reminder.title);
     _recurrenceController = TextEditingController(text: widget.reminder.recurrence);
     _ledger = List<DateTime>.from(widget.reminder.ledger);
+    _ledger.sort((a, b) => b.compareTo(a));
   }
 
   Future<void> _editLedgerEntry(int index) async {
@@ -49,6 +51,7 @@ class _EditReminderScreenState extends State<EditReminderScreen> {
         newTime.hour,
         newTime.minute,
       );
+      _ledger.sort((a, b) => b.compareTo(a));
     });
   }
 
@@ -91,7 +94,7 @@ class _EditReminderScreenState extends State<EditReminderScreen> {
                 itemBuilder: (context, index) {
                   final entry = _ledger[index];
                   return ListTile(
-                    title: Text(entry.toString().substring(0, 16)),
+                    title: Text(DateFormat('MMM d, yyyy, hh:mm a').format(entry)),
                     onTap: () => _editLedgerEntry(index),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete),
