@@ -470,6 +470,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
               children: const [
+                SizedBox(width: 34), // Width for drag handle
                 Expanded(
                     flex: 4,
                     child: Text('Reminder',
@@ -602,14 +603,97 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                   );
                 }
 
-                return ReorderableListView(
+                return ReorderableListView.builder(
                   buildDefaultDragHandles: false,
                   proxyDecorator: _proxyDecorator,
+                  itemCount: filteredDocs.length,
+                  itemBuilder: (context, index) {
+                    final document = filteredDocs[index];
+                    final reminder = Reminder.fromFirestore(document);
+                    final status = _getStatus(reminder);
+                    return Card(
+                      key: ValueKey(document.id),
+                      margin: const EdgeInsets.fromLTRB(8.0, 4.0, 24.0, 4.0),
+                      child: Row(
+                        children: [
+                          ReorderableDragStartListener(
+                            index: index,
+                            child: const Icon(Icons.drag_indicator),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                      flex: 4,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: Text(reminder.title,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold)),
+                                      )),
+                                  Expanded(
+                                      flex: 2,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(right: 12.0),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 4.0),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(status),
+                                            borderRadius:
+                                                BorderRadius.circular(4.0),
+                                          ),
+                                          child: Text(
+                                            status,
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      )),
+                                  Expanded(
+                                      flex: 2,
+                                      child: Text(DateFormat('MMM d, yyyy')
+                                          .format(reminder.nextDueDate))),
+                                  Expanded(
+                                    flex: 2,
+                                    child: reminder.ledger.isNotEmpty
+                                        ? Text(DateFormat('MMM d, yyyy')
+                                            .format(reminder.ledger.last))
+                                        : const SizedBox(),
+                                  ),
+                                  Expanded(
+                                      flex: 2, child: Text(reminder.recurrence)),
+                                  SizedBox(
+                                    width: 130,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        ElevatedButton(
+                                            onPressed: () => _markAsDone(
+                                                document.id, reminder),
+                                            child: const Text('Now')),
+                                        IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            onPressed: () =>
+                                                _navigateToEditScreen(
+                                                    document.id, reminder)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                   onReorder: (int oldIndex, int newIndex) {
                     if (newIndex > oldIndex) {
                       newIndex -= 1;
                     }
-                    final docs = snapshot.data!.docs;
+                    final docs = filteredDocs;
                     final item = docs.removeAt(oldIndex);
                     docs.insert(newIndex, item);
 
@@ -619,75 +703,6 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                     }
                     batch.commit();
                   },
-                  children: 
-                      filteredDocs.map((document) {
-                    final reminder = Reminder.fromFirestore(document);
-                    final status = _getStatus(reminder);
-                    return Card(
-                      key: ValueKey(document.id),
-                      margin: const EdgeInsets.fromLTRB(8.0, 4.0, 24.0, 4.0),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                                flex: 4,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 8.0),
-                                  child: Text(reminder.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                )),
-                            Expanded(
-                                flex: 2,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 12.0),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(status),
-                                      borderRadius: BorderRadius.circular(4.0),
-                                    ),
-                                    child: Text(
-                                      status,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                )),
-                            Expanded(
-                                flex: 2,
-                                child: Text(DateFormat('MMM d, yyyy')
-                                    .format(reminder.nextDueDate))),
-                            Expanded(
-                              flex: 2,
-                              child: reminder.ledger.isNotEmpty
-                                  ? Text(DateFormat('MMM d, yyyy')
-                                      .format(reminder.ledger.last))
-                                  : const SizedBox(),
-                            ),
-                            Expanded(
-                                flex: 2, child: Text(reminder.recurrence)),
-                            SizedBox(
-                              width: 130,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  ElevatedButton(
-                                      onPressed: () =>
-                                          _markAsDone(document.id, reminder),
-                                      child: const Text('Now')),
-                                  IconButton(
-                                      icon: const Icon(Icons.edit),
-                                      onPressed: () => _navigateToEditScreen(
-                                          document.id, reminder)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
                 );
               },
             ),
