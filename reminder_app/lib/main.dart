@@ -51,6 +51,8 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     'Most Frequent',
     'Least Frequent',
   ];
+  final List<String> _statusOptions = ['Overdue', 'Due today', 'Due soon', 'Ok'];
+  final List<String> _selectedStatuses = [];
 
   final Stream<QuerySnapshot> _remindersStream =
       FirebaseFirestore.instance.collection('reminders').orderBy('order').snapshots();
@@ -211,7 +213,11 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       number = 1;
       unit = parts[0];
       if (unit.endsWith('ly')) {
-        unit = unit.substring(0, unit.length - 2);
+        if (unit == 'daily') {
+          unit = 'day';
+        } else {
+          unit = unit.substring(0, unit.length - 2);
+        }
       }
     } else if (parts.length == 2) {
       number = int.tryParse(parts[0]) ?? 1;
@@ -246,6 +252,42 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     final now = DateTime.now();
     final newLedger = List<DateTime>.from(reminder.ledger)..add(now);
     final newDueDate = _calculateNextDueDate(now, reminder.recurrence);
+
+    FirebaseFirestore.instance.collection('reminders').doc(id).update({
+      'nextDueDate': newDueDate,
+      'ledger': newLedger,
+    });
+  }
+
+  Future<void> _logDate(String id, Reminder reminder) async {
+    final now = DateTime.now();
+    final newDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (!mounted || newDate == null) return;
+
+    final newTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now),
+    );
+
+    if (!mounted || newTime == null) return;
+
+    final newDateTime = DateTime(
+      newDate.year,
+      newDate.month,
+      newDate.day,
+      newTime.hour,
+      newTime.minute,
+    );
+
+    final newLedger = List<DateTime>.from(reminder.ledger)..add(newDateTime);
+    newLedger.sort((a, b) => b.compareTo(a));
+    final newDueDate = _calculateNextDueDate(newLedger.first, reminder.recurrence);
 
     FirebaseFirestore.instance.collection('reminders').doc(id).update({
       'nextDueDate': newDueDate,
@@ -348,6 +390,61 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     );
   }
 
+  Future<void> _showStatusFilterDialog() async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Filter by Status'),
+              content: SizedBox(
+                width: double.minPositive,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _statusOptions.length,
+                  itemBuilder: (context, index) {
+                    final status = _statusOptions[index];
+                    return CheckboxListTile(
+                      title: Text(status),
+                      value: _selectedStatuses.contains(status),
+                      onChanged: (bool? value) {
+                        setState(() {
+                          if (value == true) {
+                            _selectedStatuses.add(status);
+                          } else {
+                            _selectedStatuses.remove(status);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    // We need to call the parent's setState to rebuild the list
+                    super.setState(() {});
+                  },
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStatuses.clear();
+    });
+  }
+
   void _sortDocuments(List<DocumentSnapshot> docs) {
     switch (_activeSort) {
       case 'Name (ascending)':
@@ -436,7 +533,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Search',
                       hintText: 'Search reminders...',
                       prefixIcon: Icon(Icons.search),
@@ -445,6 +542,11 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                       ),
                     ),
                   ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _clearFilters,
+                  child: const Text('Clear Filters'),
                 ),
                 const SizedBox(width: 10),
                 DropdownButton<String>(
@@ -465,36 +567,49 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
             ),
           ),
           // Header
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: const [
-                SizedBox(width: 34), // Width for drag handle
-                Expanded(
-                    flex: 4,
-                    child: Text('Reminder',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(
-                    flex: 2,
-                    child: Text('Status',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(
-                    flex: 2,
-                    child: Text('Next',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(
-                    flex: 2,
-                    child: Text('Previous',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(
-                    flex: 2,
-                    child: Text('Frequency',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                SizedBox(width: 130), // Width for buttons
-              ],
-            ),
-          ),
+          LayoutBuilder(builder: (context, constraints) {
+            if (constraints.maxWidth < 600) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  const SizedBox(width: 34), // Width for drag handle
+                  const Expanded(
+                      flex: 4,
+                      child: Text('Reminder',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                  Expanded(
+                      flex: 2,
+                      child: Row(
+                        children: [
+                          const Text('Status',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          IconButton(
+                            icon: const Icon(Icons.filter_list),
+                            onPressed: _showStatusFilterDialog,
+                          ),
+                        ],
+                      )),
+                  const Expanded(
+                      flex: 2,
+                      child: Text('Next',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                  const Expanded(
+                      flex: 2,
+                      child: Text('Previous',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                  const Expanded(
+                      flex: 2,
+                      child: Text('Frequency',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                  const SizedBox(width: 200), // Width for buttons
+                ],
+              ),
+            );
+          }),
           const Divider(height: 1),
 
           // List
@@ -517,9 +632,16 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
 
                 final filteredDocs = snapshot.data!.docs.where((doc) {
                   final reminder = Reminder.fromFirestore(doc);
-                  return reminder.title
+                  final titleMatch = reminder.title
                       .toLowerCase()
                       .contains(_searchQuery.toLowerCase());
+
+                  if (_selectedStatuses.isEmpty) {
+                    return titleMatch;
+                  }
+
+                  final status = _getStatus(reminder);
+                  return titleMatch && _selectedStatuses.contains(status);
                 }).toList();
 
                 _sortDocuments(filteredDocs);
@@ -532,72 +654,17 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 if (_activeSort != 'Manual' || _searchQuery.isNotEmpty) {
                   return ListView(
                     children: 
-                        filteredDocs.map((document) {
+                        filteredDocs.map<Widget>((document) {
                       final reminder = Reminder.fromFirestore(document);
                       final status = _getStatus(reminder);
-                      return Card(
-                        key: ValueKey(document.id),
-                        margin: const EdgeInsets.fromLTRB(8.0, 4.0, 24.0, 4.0),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                  flex: 4,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(left: 8.0),
-                                    child: Text(reminder.title,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold)),
-                                  )),
-                              Expanded(
-                                  flex: 2,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 12.0),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(status),
-                                        borderRadius: BorderRadius.circular(4.0),
-                                      ),
-                                      child: Text(
-                                        status,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  )),
-                              Expanded(
-                                  flex: 2,
-                                  child: Text(DateFormat('MMM d, yyyy')
-                                      .format(reminder.nextDueDate))),
-                              Expanded(
-                                flex: 2,
-                                child: reminder.ledger.isNotEmpty
-                                    ? Text(DateFormat('MMM d, yyyy')
-                                        .format(reminder.ledger.last))
-                                    : const SizedBox(),
-                              ),
-                              Expanded(
-                                  flex: 2, child: Text(reminder.recurrence)),
-                              SizedBox(
-                                width: 130,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    ElevatedButton(
-                                        onPressed: () =>
-                                            _markAsDone(document.id, reminder),
-                                        child: const Text('Now')),
-                                    IconButton(
-                                        icon: const Icon(Icons.edit),
-                                        onPressed: () => _navigateToEditScreen(
-                                            document.id, reminder)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      return ReminderListItem(
+                        reminder: reminder,
+                        status: status,
+                        statusColor: _getStatusColor(status),
+                        documentId: document.id,
+                        onMarkAsDone: _markAsDone,
+                        onLogDate: _logDate,
+                        onNavigateToEdit: _navigateToEditScreen,
                       );
                     }).toList(),
                   );
@@ -611,82 +678,20 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                     final document = filteredDocs[index];
                     final reminder = Reminder.fromFirestore(document);
                     final status = _getStatus(reminder);
-                    return Card(
+                    return ReminderListItem(
                       key: ValueKey(document.id),
-                      margin: const EdgeInsets.fromLTRB(8.0, 4.0, 24.0, 4.0),
-                      child: Row(
-                        children: [
-                          ReorderableDragStartListener(
-                            index: index,
-                            child: const Icon(Icons.drag_indicator),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                      flex: 4,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(left: 8.0),
-                                        child: Text(reminder.title,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold)),
-                                      )),
-                                  Expanded(
-                                      flex: 2,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(right: 12.0),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 4.0),
-                                          decoration: BoxDecoration(
-                                            color: _getStatusColor(status),
-                                            borderRadius:
-                                                BorderRadius.circular(4.0),
-                                          ),
-                                          child: Text(
-                                            status,
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      )),
-                                  Expanded(
-                                      flex: 2,
-                                      child: Text(DateFormat('MMM d, yyyy')
-                                          .format(reminder.nextDueDate))),
-                                  Expanded(
-                                    flex: 2,
-                                    child: reminder.ledger.isNotEmpty
-                                        ? Text(DateFormat('MMM d, yyyy')
-                                            .format(reminder.ledger.last))
-                                        : const SizedBox(),
-                                  ),
-                                  Expanded(
-                                      flex: 2, child: Text(reminder.recurrence)),
-                                  SizedBox(
-                                    width: 130,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        ElevatedButton(
-                                            onPressed: () => _markAsDone(
-                                                document.id, reminder),
-                                            child: const Text('Now')),
-                                        IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            onPressed: () =>
-                                                _navigateToEditScreen(
-                                                    document.id, reminder)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                      leading: ReorderableDragStartListener(
+                        key: ValueKey('drag_handle_${document.id}'),
+                        index: index,
+                        child: const Icon(Icons.drag_indicator),
                       ),
+                      reminder: reminder,
+                      status: status,
+                      statusColor: _getStatusColor(status),
+                      documentId: document.id,
+                      onMarkAsDone: _markAsDone,
+                      onLogDate: _logDate,
+                      onNavigateToEdit: _navigateToEditScreen,
                     );
                   },
                   onReorder: (int oldIndex, int newIndex) {
@@ -714,6 +719,167 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
         tooltip: 'Add Reminder',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class ReminderListItem extends StatelessWidget {
+  final Reminder reminder;
+  final String status;
+  final Color statusColor;
+  final String documentId;
+  final Function(String, Reminder) onMarkAsDone;
+  final Function(String, Reminder) onLogDate;
+  final Function(String, Reminder) onNavigateToEdit;
+  final Widget? leading;
+
+  const ReminderListItem({
+    Key? key,
+    required this.reminder,
+    required this.status,
+    required this.statusColor,
+    required this.documentId,
+    required this.onMarkAsDone,
+    required this.onLogDate,
+    required this.onNavigateToEdit,
+    this.leading,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          // Mobile layout
+          return Card(
+            margin: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    reminder.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              borderRadius: BorderRadius.circular(4.0),
+                            ),
+                            child: Text(status),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('Next: ${DateFormat('MMM d, yyyy').format(reminder.nextDueDate)}'),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          ElevatedButton(
+                            onPressed: () => onLogDate(documentId, reminder),
+                            child: const Text('Log'),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => onNavigateToEdit(documentId, reminder),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          // Desktop layout
+          return Card(
+            key: ValueKey(documentId),
+            margin: const EdgeInsets.fromLTRB(8.0, 4.0, 24.0, 4.0),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  if (leading != null) leading!,
+                  Expanded(
+                      flex: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: Text(reminder.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold)),
+                      )),
+                  Expanded(
+                      flex: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12.0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            borderRadius: BorderRadius.circular(4.0),
+                          ),
+                          child: Text(
+                            status,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )),
+                  Expanded(
+                      flex: 2,
+                      child: Text(DateFormat('MMM d, yyyy')
+                          .format(reminder.nextDueDate))),
+                  Expanded(
+                    flex: 2,
+                    child: reminder.ledger.isNotEmpty
+                        ? Text(DateFormat('MMM d, yyyy')
+                            .format(reminder.ledger.last))
+                        : const SizedBox(),
+                  ),
+                  Expanded(
+                      flex: 2, child: Text(reminder.recurrence)),
+                  SizedBox(
+                    width: 200,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Tooltip(
+                          message: 'Mark as done now',
+                          child: ElevatedButton(
+                              onPressed: () =>
+                                  onMarkAsDone(documentId, reminder),
+                              child: const Text('Now')),
+                        ),
+                        const SizedBox(width: 5),
+                        Tooltip(
+                          message: 'Log a past completion',
+                          child: ElevatedButton(
+                              onPressed: () =>
+                                  onLogDate(documentId, reminder),
+                              child: const Text('Log')),
+                        ),
+                        IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => onNavigateToEdit(
+                                documentId, reminder)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      },
     );
   }
 }
