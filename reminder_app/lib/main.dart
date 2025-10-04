@@ -652,21 +652,12 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 }
 
                 if (_activeSort != 'Manual' || _searchQuery.isNotEmpty) {
-                  return ListView(
-                    children: 
-                        filteredDocs.map<Widget>((document) {
-                      final reminder = Reminder.fromFirestore(document);
-                      final status = _getStatus(reminder);
-                      return ReminderListItem(
-                        reminder: reminder,
-                        status: status,
-                        statusColor: _getStatusColor(status),
-                        documentId: document.id,
-                        onMarkAsDone: _markAsDone,
-                        onLogDate: _logDate,
-                        onNavigateToEdit: _navigateToEditScreen,
-                      );
-                    }).toList(),
+                  return ListView.builder(
+                    itemCount: filteredDocs.length,
+                    itemBuilder: (context, index) {
+                      final document = filteredDocs[index];
+                      return _buildItem(document);
+                    },
                   );
                 }
 
@@ -676,23 +667,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                   itemCount: filteredDocs.length,
                   itemBuilder: (context, index) {
                     final document = filteredDocs[index];
-                    final reminder = Reminder.fromFirestore(document);
-                    final status = _getStatus(reminder);
-                    return ReminderListItem(
-                      key: ValueKey(document.id),
-                      leading: ReorderableDragStartListener(
-                        key: ValueKey('drag_handle_${document.id}'),
-                        index: index,
-                        child: const Icon(Icons.drag_indicator),
-                      ),
-                      reminder: reminder,
-                      status: status,
-                      statusColor: _getStatusColor(status),
-                      documentId: document.id,
-                      onMarkAsDone: _markAsDone,
-                      onLogDate: _logDate,
-                      onNavigateToEdit: _navigateToEditScreen,
-                    );
+                    return _buildReorderableItem(document, index);
                   },
                   onReorder: (int oldIndex, int newIndex) {
                     if (newIndex > oldIndex) {
@@ -721,6 +696,42 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       ),
     );
   }
+
+  Widget _buildItem(DocumentSnapshot<Object?> document) {
+    final reminder = Reminder.fromFirestore(document);
+    final status = _getStatus(reminder);
+    return ReminderListItem(
+      key: ValueKey(document.id),
+      reminder: reminder,
+      status: status,
+      statusColor: _getStatusColor(status),
+      documentId: document.id,
+      onMarkAsDone: _markAsDone,
+      onLogDate: _logDate,
+      onNavigateToEdit: _navigateToEditScreen,
+    );
+  }
+
+  Widget _buildReorderableItem(DocumentSnapshot<Object?> document, int index) {
+    final reminder = Reminder.fromFirestore(document);
+    final status = _getStatus(reminder);
+    return ReminderListItem(
+      key: ValueKey(document.id),
+      index: index,
+      leading: ReorderableDragStartListener(
+        key: ValueKey('drag_handle_${document.id}'),
+        index: index,
+        child: const Icon(Icons.drag_indicator),
+      ),
+      reminder: reminder,
+      status: status,
+      statusColor: _getStatusColor(status),
+      documentId: document.id,
+      onMarkAsDone: _markAsDone,
+      onLogDate: _logDate,
+      onNavigateToEdit: _navigateToEditScreen,
+    );
+  }
 }
 
 class ReminderListItem extends StatelessWidget {
@@ -732,9 +743,10 @@ class ReminderListItem extends StatelessWidget {
   final Function(String, Reminder) onLogDate;
   final Function(String, Reminder) onNavigateToEdit;
   final Widget? leading;
+  final int? index;
 
   const ReminderListItem({
-    Key? key,
+    super.key,
     required this.reminder,
     required this.status,
     required this.statusColor,
@@ -743,7 +755,8 @@ class ReminderListItem extends StatelessWidget {
     required this.onLogDate,
     required this.onNavigateToEdit,
     this.leading,
-  }) : super(key: key);
+    this.index,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -751,7 +764,7 @@ class ReminderListItem extends StatelessWidget {
       builder: (context, constraints) {
         if (constraints.maxWidth < 600) {
           // Mobile layout
-          return Card(
+          final card = Card(
             margin: const EdgeInsets.fromLTRB(8.0, 4.0, 8.0, 4.0),
             child: Padding(
               padding: const EdgeInsets.all(12.0),
@@ -800,6 +813,14 @@ class ReminderListItem extends StatelessWidget {
               ),
             ),
           );
+
+          if (index != null) {
+            return ReorderableDelayedDragStartListener(
+              index: index!,
+              child: card,
+            );
+          }
+          return card;
         } else {
           // Desktop layout
           return Card(
