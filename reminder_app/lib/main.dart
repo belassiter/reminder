@@ -51,7 +51,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     'Most Frequent',
     'Least Frequent',
   ];
-  final List<String> _statusOptions = ['Overdue', 'Due today', 'Due soon', 'Ok'];
+  final List<String> _statusOptions = ['All', 'Overdue', 'Due today', 'Due soon', 'Ok'];
   final List<String> _selectedStatuses = [];
 
   final Stream<QuerySnapshot> _remindersStream =
@@ -390,7 +390,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     );
   }
 
-  Future<void> _showStatusFilterDialog() async {
+  Future<void> _showFilterDialog() async {
     await showDialog(
       context: context,
       builder: (context) {
@@ -411,7 +411,13 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                       onChanged: (bool? value) {
                         setState(() {
                           if (value == true) {
-                            _selectedStatuses.add(status);
+                            if (status == 'None') {
+                              _selectedStatuses.clear();
+                              _selectedStatuses.add('None');
+                            } else {
+                              _selectedStatuses.remove('None');
+                              _selectedStatuses.add(status);
+                            }
                           } else {
                             _selectedStatuses.remove(status);
                           }
@@ -424,6 +430,9 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
               actions: [
                 TextButton(
                   onPressed: () {
+                    if (_selectedStatuses.contains('None')) {
+                      _clearFilters();
+                    }
                     Navigator.of(context).pop();
                     // We need to call the parent's setState to rebuild the list
                     super.setState(() {});
@@ -544,9 +553,10 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _clearFilters,
-                  child: const Text('Clear Filters'),
+                IconButton(
+                  onPressed: _showFilterDialog,
+                  icon: const Icon(Icons.filter_list),
+                  tooltip: 'Filter',
                 ),
                 const SizedBox(width: 10),
                 DropdownButton<String>(
@@ -581,18 +591,10 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                       flex: 4,
                       child: Text('Reminder',
                           style: TextStyle(fontWeight: FontWeight.bold))),
-                  Expanded(
+                  const Expanded(
                       flex: 2,
-                      child: Row(
-                        children: [
-                          const Text('Status',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          IconButton(
-                            icon: const Icon(Icons.filter_list),
-                            onPressed: _showStatusFilterDialog,
-                          ),
-                        ],
-                      )),
+                      child: Text('Status',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
                   const Expanded(
                       flex: 2,
                       child: Text('Next',
@@ -636,7 +638,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                       .toLowerCase()
                       .contains(_searchQuery.toLowerCase());
 
-                  if (_selectedStatuses.isEmpty) {
+                  if (_selectedStatuses.isEmpty || _selectedStatuses.contains('None')) {
                     return titleMatch;
                   }
 
