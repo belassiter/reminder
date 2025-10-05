@@ -87,7 +87,7 @@ class _EditReminderScreenState extends State<EditReminderScreen> {
               decoration: const InputDecoration(labelText: 'Recurrence'),
             ),
             const SizedBox(height: 20),
-            const Text('Ledger', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             Expanded(
               child: ListView.builder(
                 itemCount: _ledger.length,

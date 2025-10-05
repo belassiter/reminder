@@ -4,16 +4,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:reminder_app/edit_reminder_screen.dart';
 import 'package:reminder_app/firebase_options.dart';
 import 'package:reminder_app/reminder.dart';
+import 'package:reminder_app/settings_screen.dart';
+import 'package:reminder_app/theme_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+  runApp(ChangeNotifierProvider<ThemeManager>(
+    create: (_) => ThemeManager(),
+    child: const MyApp(),
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -23,9 +29,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Reminder App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(),
+      darkTheme: ThemeData.dark(),
+      themeMode: context.watch<ThemeManager>().themeMode,
       home: const ReminderListScreen(),
     );
   }
@@ -407,19 +413,24 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                     final status = _statusOptions[index];
                     return CheckboxListTile(
                       title: Text(status),
-                      value: _selectedStatuses.contains(status),
+                      value: _selectedStatuses.contains(status) || (_selectedStatuses.isEmpty && status == 'All'),
                       onChanged: (bool? value) {
                         setState(() {
                           if (value == true) {
-                            if (status == 'None') {
+                            if (status == 'All') {
                               _selectedStatuses.clear();
-                              _selectedStatuses.add('None');
                             } else {
-                              _selectedStatuses.remove('None');
-                              _selectedStatuses.add(status);
+                              _selectedStatuses.remove('All');
+                              if (!_selectedStatuses.contains(status)) {
+                                _selectedStatuses.add(status);
+                              }
                             }
                           } else {
-                            _selectedStatuses.remove(status);
+                            if (status == 'All') {
+                              // Do nothing
+                            } else {
+                              _selectedStatuses.remove(status);
+                            }
                           }
                         });
                       },
@@ -430,12 +441,8 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    if (_selectedStatuses.contains('None')) {
-                      _clearFilters();
-                    }
                     Navigator.of(context).pop();
-                    // We need to call the parent's setState to rebuild the list
-                    super.setState(() {});
+                    this.setState(() {});
                   },
                   child: const Text('Done'),
                 ),
@@ -532,6 +539,19 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reminders'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -762,6 +782,13 @@ class ReminderListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final ButtonStyle? elevatedButtonStyle = isDarkMode
+        ? ElevatedButton.styleFrom(
+            backgroundColor: Colors.grey.shade300,
+            foregroundColor: Colors.black,
+          )
+        : null;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 600) {
@@ -791,7 +818,7 @@ class ReminderListItem extends StatelessWidget {
                               color: statusColor,
                               borderRadius: BorderRadius.circular(4.0),
                             ),
-                            child: Text(status),
+                            child: Text(status, style: const TextStyle(color: Colors.black)),
                           ),
                           const SizedBox(width: 8),
                           Text('Next: ${DateFormat('MMM d, yyyy').format(reminder.nextDueDate)}'),
@@ -801,6 +828,7 @@ class ReminderListItem extends StatelessWidget {
                         children: [
                           ElevatedButton(
                             onPressed: () => onLogDate(documentId, reminder),
+                            style: elevatedButtonStyle,
                             child: const Text('Log'),
                           ),
                           IconButton(
@@ -854,6 +882,7 @@ class ReminderListItem extends StatelessWidget {
                           child: Text(
                             status,
                             textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.black),
                           ),
                         ),
                       )),
@@ -880,6 +909,7 @@ class ReminderListItem extends StatelessWidget {
                           child: ElevatedButton(
                               onPressed: () =>
                                   onMarkAsDone(documentId, reminder),
+                              style: elevatedButtonStyle,
                               child: const Text('Now')),
                         ),
                         const SizedBox(width: 5),
@@ -888,6 +918,7 @@ class ReminderListItem extends StatelessWidget {
                           child: ElevatedButton(
                               onPressed: () =>
                                   onLogDate(documentId, reminder),
+                              style: elevatedButtonStyle,
                               child: const Text('Log')),
                         ),
                         IconButton(
