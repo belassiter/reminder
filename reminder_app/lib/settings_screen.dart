@@ -15,45 +15,35 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Theme',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            RadioListTile<ThemeMode>(
-              title: const Text('System'),
-              value: ThemeMode.system,
-              groupValue: themeManager.themeMode,
-              onChanged: (ThemeMode? value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                }
-              },
-            ),
-            RadioListTile<ThemeMode>(
-              title: const Text('Light'),
-              value: ThemeMode.light,
-              groupValue: themeManager.themeMode,
-              onChanged: (ThemeMode? value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                }
-              },
-            ),
-            RadioListTile<ThemeMode>(
-              title: const Text('Dark'),
-              value: ThemeMode.dark,
-              groupValue: themeManager.themeMode,
-              onChanged: (ThemeMode? value) {
-                if (value != null) {
-                  themeManager.setThemeMode(value);
-                }
-              },
-            ),
-          ],
+        child: RadioGroup<ThemeMode>(
+          groupValue: themeManager.themeMode,
+          onChanged: (ThemeMode? value) {
+            if (value != null) {
+              themeManager.setThemeMode(value);
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Theme',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              const RadioListTile<ThemeMode>(
+                title: Text('System'),
+                value: ThemeMode.system,
+              ),
+              const RadioListTile<ThemeMode>(
+                title: Text('Light'),
+                value: ThemeMode.light,
+              ),
+              const RadioListTile<ThemeMode>(
+                title: Text('Dark'),
+                value: ThemeMode.dark,
+              ),
+            ],
+          ),
         ),
       ),
     );

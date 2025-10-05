@@ -454,13 +454,6 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     );
   }
 
-  void _clearFilters() {
-    setState(() {
-      _searchController.clear();
-      _selectedStatuses.clear();
-    });
-  }
-
   void _sortDocuments(List<DocumentSnapshot> docs) {
     switch (_activeSort) {
       case 'Name (ascending)':
