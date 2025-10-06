@@ -7,6 +7,10 @@ import 'package:intl/intl.dart';
 import 'package:reminder_app/edit_reminder_screen.dart';
 import 'package:reminder_app/reminder.dart';
 import 'package:reminder_app/settings_screen.dart';
+import 'package:reminder_app/auth_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:reminder_app/login_screen.dart';
+import 'package:flutter_signin_button/flutter_signin_button.dart';
 
 class ReminderListScreen extends StatefulWidget {
   const ReminderListScreen({super.key});
@@ -38,14 +42,6 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _remindersStream = FirebaseFirestore.instance
-          .collection('reminders')
-          .where('userId', isEqualTo: user.uid)
-          .orderBy('order')
-          .snapshots();
-    }
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -299,12 +295,10 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     }
   }
 
-  Future<void> _showAddReminderDialog() async {
+  Future<void> _showAddReminderDialog(User user) async {
     final titleController = TextEditingController();
     final recurrenceController = TextEditingController();
     String? recurrenceError;
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
 
     final int reminderCount = (await FirebaseFirestore.instance.collection('reminders').where('userId', isEqualTo: user.uid).get()).docs.length;
 
@@ -511,186 +505,238 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reminders'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
-              );
-            },
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = snapshot.data;
+
+        // Initialize stream if user is authenticated
+        if (user != null) {
+          _remindersStream ??= FirebaseFirestore.instance
+              .collection('reminders')
+              .where('userId', isEqualTo: user.uid)
+              .orderBy('order')
+              .snapshots();
+        } else {
+          _remindersStream = null;
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Reminders'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      labelText: 'Search',
-                      hintText: 'Search reminders...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(25.0)),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          labelText: 'Search',
+                          hintText: 'Search reminders...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(25.0)),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      onPressed: _showFilterDialog,
+                      icon: const Icon(Icons.filter_list),
+                      tooltip: 'Filter',
+                    ),
+                    const SizedBox(width: 10),
+                    DropdownButton<String>(
+                      value: _activeSort,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _activeSort = newValue!;
+                        });
+                      },
+                      items: _sortOptions
+                          .map<DropdownMenuItem<String>>((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: _showFilterDialog,
-                  icon: const Icon(Icons.filter_list),
-                  tooltip: 'Filter',
-                ),
-                const SizedBox(width: 10),
-                DropdownButton<String>(
-                  value: _activeSort,
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _activeSort = newValue!;
-                    });
-                  },
-                  items: _sortOptions.map<DropdownMenuItem<String>>((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          // Header
-          LayoutBuilder(builder: (context, constraints) {
-            if (constraints.maxWidth < 600) {
-              return const SizedBox.shrink();
-            }
-            return Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  const SizedBox(width: 34), // Width for drag handle
-                  const Expanded(
-                      flex: 4,
-                      child: Text('Reminder',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(
-                      flex: 2,
-                      child: Text('Status',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(
-                      flex: 2,
-                      child: Text('Next',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(
-                      flex: 2,
-                      child: Text('Previous',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  const Expanded(
-                      flex: 2,
-                      child: Text('Frequency',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  const SizedBox(width: 200), // Width for buttons
-                ],
               ),
-            );
-          }),
-          const Divider(height: 1),
-
-          // List
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _remindersStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Text('Something went wrong');
+              // Header
+              LayoutBuilder(builder: (context, constraints) {
+                if (constraints.maxWidth < 600) {
+                  return const SizedBox.shrink();
                 }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
-                      child: Text('No reminders yet. Add one!'));
-                }
-
-                final filteredDocs = snapshot.data!.docs.where((doc) {
-                  final reminder = Reminder.fromFirestore(doc);
-                  final titleMatch = reminder.title
-                      .toLowerCase()
-                      .contains(_searchQuery.toLowerCase());
-
-                  if (_selectedStatuses.isEmpty || _selectedStatuses.contains('None')) {
-                    return titleMatch;
-                  }
-
-                  final status = _getStatus(reminder);
-                  return titleMatch && _selectedStatuses.contains(status);
-                }).toList();
-
-                _sortDocuments(filteredDocs);
-
-                if (filteredDocs.isEmpty) {
-                  return const Center(
-                      child: Text('No matching reminders found.'));
-                }
-
-                if (_activeSort != 'Manual' || _searchQuery.isNotEmpty) {
-                  return ListView.builder(
-                    itemCount: filteredDocs.length,
-                    itemBuilder: (context, index) {
-                      final document = filteredDocs[index];
-                      return _buildItem(document);
-                    },
-                  );
-                }
-
-                return ReorderableListView.builder(
-                  buildDefaultDragHandles: false,
-                  proxyDecorator: _proxyDecorator,
-                  itemCount: filteredDocs.length,
-                  itemBuilder: (context, index) {
-                    final document = filteredDocs[index];
-                    return _buildReorderableItem(document, index);
-                  },
-                  onReorder: (int oldIndex, int newIndex) {
-                    if (newIndex > oldIndex) {
-                      newIndex -= 1;
-                    }
-                    final docs = filteredDocs;
-                    final item = docs.removeAt(oldIndex);
-                    docs.insert(newIndex, item);
-
-                    final batch = FirebaseFirestore.instance.batch();
-                    for (int i = 0; i < docs.length; i++) {
-                      batch.update(docs[i].reference, {'order': i});
-                    }
-                    batch.commit();
-                  },
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 34), // Width for drag handle
+                      Expanded(
+                          flex: 4,
+                          child: Text('Reminder',
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Status',
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Next',
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Previous',
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                          flex: 2,
+                          child: Text('Frequency',
+                              style: TextStyle(fontWeight: FontWeight.bold))),
+                      SizedBox(width: 200), // Width for buttons
+                    ],
+                  ),
                 );
-              },
-            ),
+              }),
+              const Divider(height: 1),
+
+              // List or Login Button
+              Expanded(
+                child: (kIsWeb && user == null)
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SignInButton(
+                            Buttons.Google,
+                            onPressed: () async {
+                              await AuthService().signInWithGoogle();
+                            },
+                          ),
+                        ],
+                      )
+                    : (user == null)
+                        ? const Center(child: Text('Please log in.'))
+                        : StreamBuilder<QuerySnapshot>(
+                            stream: _remindersStream,
+                            builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return const Text('Something went wrong');
+                              }
+
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              }
+
+                              if (!snapshot.hasData ||
+                                  snapshot.data!.docs.isEmpty) {
+                                return const Center(
+                                    child: Text('No reminders yet. Add one!'));
+                              }
+
+                              final filteredDocs =
+                                  snapshot.data!.docs.where((doc) {
+                                final reminder = Reminder.fromFirestore(doc);
+                                final titleMatch = reminder.title
+                                    .toLowerCase()
+                                    .contains(_searchQuery.toLowerCase());
+
+                                if (_selectedStatuses.isEmpty ||
+                                    _selectedStatuses.contains('All')) {
+                                  return titleMatch;
+                                }
+
+                                final status = _getStatus(reminder);
+                                return titleMatch &&
+                                    _selectedStatuses.contains(status);
+                              }).toList();
+
+                              _sortDocuments(filteredDocs);
+
+                              if (filteredDocs.isEmpty) {
+                                return const Center(
+                                    child: Text(
+                                        'No matching reminders found.'));
+                              }
+
+                              if (_activeSort != 'Manual' ||
+                                  _searchQuery.isNotEmpty) {
+                                return ListView.builder(
+                                  itemCount: filteredDocs.length,
+                                  itemBuilder: (context, index) {
+                                    final document = filteredDocs[index];
+                                    return _buildItem(document);
+                                  },
+                                );
+                              }
+
+                              return ReorderableListView.builder(
+                                buildDefaultDragHandles: false,
+                                proxyDecorator: _proxyDecorator,
+                                itemCount: filteredDocs.length,
+                                itemBuilder: (context, index) {
+                                  final document = filteredDocs[index];
+                                  return _buildReorderableItem(
+                                      document, index);
+                                },
+                                onReorder: (int oldIndex, int newIndex) {
+                                  if (newIndex > oldIndex) {
+                                    newIndex -= 1;
+                                  }
+                                  final docs = filteredDocs;
+                                  final item = docs.removeAt(oldIndex);
+                                  docs.insert(newIndex, item);
+
+                                  final batch =
+                                      FirebaseFirestore.instance.batch();
+                                  for (int i = 0; i < docs.length; i++) {
+                                    batch.update(
+                                        docs[i].reference, {'order': i});
+                                  }
+                                  batch.commit();
+                                },
+                              );
+                            },
+                          ),
+              ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddReminderDialog,
-        tooltip: 'Add Reminder',
-        child: const Icon(Icons.add),
-      ),
+          floatingActionButton: user != null
+              ? FloatingActionButton(
+                  onPressed: () => _showAddReminderDialog(user),
+                  tooltip: 'Add Reminder',
+                  child: const Icon(Icons.add),
+                )
+              : null,
+        );
+      },
     );
   }
 
