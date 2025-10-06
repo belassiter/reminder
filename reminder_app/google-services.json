@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "131226420477",
+    "project_id": "reminders-c8bd8",
+    "storage_bucket": "reminders-c8bd8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:131226420477:android:a4d1705fbb5b504513aa94",
+        "android_client_info": {
+          "package_name": "com.example.reminder_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "131226420477-sja7e41q3rmos9peeahetsa4uhd6g233.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGU9l8WX-waiXDj5fB4pcz5w6N8lSQJTc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "131226420477-7a6bq2rmgdllfm69ufsuev3n5dm33e8e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "131226420477-hubov115icnbqrii5g19v8iid0caoda7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.reminderApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

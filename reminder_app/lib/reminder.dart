@@ -7,6 +7,7 @@ class Reminder {
   final String recurrence;
   final List<DateTime> ledger;
   final int order;
+  final String userId;
 
   Reminder({
     this.id,
@@ -15,6 +16,7 @@ class Reminder {
     required this.recurrence,
     this.ledger = const [],
     required this.order,
+    required this.userId,
   });
 
   factory Reminder.fromFirestore(DocumentSnapshot doc) {
@@ -28,6 +30,7 @@ class Reminder {
           .map((e) => (e as Timestamp).toDate())
           .toList(),
       order: data['order'] ?? 0,
+      userId: data['userId'] ?? '',
     );
   }
 
@@ -38,6 +41,7 @@ class Reminder {
       'recurrence': recurrence,
       'ledger': ledger,
       'order': order,
+      'userId': userId,
     };
   }
 
@@ -48,6 +52,7 @@ class Reminder {
     String? recurrence,
     List<DateTime>? ledger,
     int? order,
+    String? userId,
   }) {
     return Reminder(
       id: id ?? this.id,
@@ -56,6 +61,7 @@ class Reminder {
       recurrence: recurrence ?? this.recurrence,
       ledger: ledger ?? this.ledger,
       order: order ?? this.order,
+      userId: userId ?? this.userId,
     );
   }
 }
