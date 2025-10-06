@@ -1,8 +1,12 @@
 
-import 'package:reminder_app/auth_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:reminder_app/auth_service.dart';
 import 'package:reminder_app/theme_manager.dart';
+
+import 'package:reminder_app/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -12,6 +16,53 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _notificationsEnabled = false;
+  TimeOfDay _notificationTime = const TimeOfDay(hour: 9, minute: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb) {
+      _loadSettings();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notificationsEnabled = prefs.getBool('notificationsEnabled') ?? false;
+      final hour = prefs.getInt('notificationHour') ?? 9;
+      final minute = prefs.getInt('notificationMinute') ?? 0;
+      _notificationTime = TimeOfDay(hour: hour, minute: minute);
+    });
+  }
+
+  Future<void> _updateNotificationEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notificationsEnabled', value);
+    setState(() {
+      _notificationsEnabled = value;
+    });
+    if (!value) {
+      await NotificationService().cancelAllNotifications();
+    }
+  }
+
+  Future<void> _selectNotificationTime(BuildContext context) async {
+    final newTime = await showTimePicker(
+      context: context,
+      initialTime: _notificationTime,
+    );
+    if (newTime != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('notificationHour', newTime.hour);
+      await prefs.setInt('notificationMinute', newTime.minute);
+      setState(() {
+        _notificationTime = newTime;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeManager = Provider.of<ThemeManager>(context);
@@ -28,7 +79,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'Theme',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 16),
             Column(
               children: [
                 ListTile(
@@ -78,6 +128,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            if (!kIsWeb) ...[
+              const Divider(),
+              Text(
+                'Notifications',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              SwitchListTile(
+                title: const Text('Enable Notifications'),
+                value: _notificationsEnabled,
+                onChanged: _updateNotificationEnabled,
+              ),
+              ListTile(
+                title: const Text('Notification Time'),
+                subtitle: Text(_notificationTime.format(context)),
+                onTap: () => _selectNotificationTime(context),
+                enabled: _notificationsEnabled,
+              ),
+            ],
             const Spacer(),
             Center(
               child: ElevatedButton(

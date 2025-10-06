@@ -5,11 +5,15 @@ import 'package:reminder_app/auth_gate.dart';
 import 'package:reminder_app/firebase_options.dart';
 import 'package:reminder_app/theme_manager.dart';
 
+import 'package:reminder_app/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await NotificationService().init();
+  await NotificationService().requestPermissions();
   runApp(ChangeNotifierProvider<ThemeManager>(
     create: (_) => ThemeManager(),
     child: const MyApp(),

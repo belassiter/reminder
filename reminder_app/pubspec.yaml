@@ -41,6 +41,8 @@ dependencies:
   firebase_auth: ^4.20.0
   google_sign_in: ^6.2.1
   flutter_signin_button: ^2.0.0
+  flutter_local_notifications: ^19.4.2
+  shared_preferences: ^2.5.3
 
 
 dev_dependencies:

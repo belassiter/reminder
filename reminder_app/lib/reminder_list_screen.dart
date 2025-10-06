@@ -10,6 +10,8 @@ import 'package:reminder_app/settings_screen.dart';
 import 'package:reminder_app/auth_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_signin_button/flutter_signin_button.dart';
+import 'package:reminder_app/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ReminderListScreen extends StatefulWidget {
   const ReminderListScreen({super.key});
@@ -52,6 +54,17 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scheduleNotification(Reminder reminder) async {
+    final prefs = await SharedPreferences.getInstance();
+    final notificationsEnabled = prefs.getBool('notificationsEnabled') ?? false;
+    if (notificationsEnabled) {
+      final hour = prefs.getInt('notificationHour') ?? 9;
+      final minute = prefs.getInt('notificationMinute') ?? 0;
+      final scheduledTime = DateTime(reminder.nextDueDate.year, reminder.nextDueDate.month, reminder.nextDueDate.day, hour, minute);
+      await NotificationService().scheduleNotification(reminder, scheduledTime);
+    }
   }
 
   Widget _proxyDecorator(Widget child, int index, Animation<double> animation) {
@@ -231,11 +244,13 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     final now = DateTime.now();
     final newLedger = List<DateTime>.from(reminder.ledger)..add(now);
     final newDueDate = _calculateNextDueDate(now, reminder.recurrence);
+    final updatedReminder = reminder.copyWith(
+      nextDueDate: newDueDate,
+      ledger: newLedger,
+    );
 
-    FirebaseFirestore.instance.collection('reminders').doc(id).update({
-      'nextDueDate': newDueDate,
-      'ledger': newLedger,
-    });
+    FirebaseFirestore.instance.collection('reminders').doc(id).update(updatedReminder.toFirestore());
+    _scheduleNotification(updatedReminder);
   }
 
   Future<void> _logDate(String id, Reminder reminder) async {
@@ -267,11 +282,13 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     final newLedger = List<DateTime>.from(reminder.ledger)..add(newDateTime);
     newLedger.sort((a, b) => b.compareTo(a));
     final newDueDate = _calculateNextDueDate(newLedger.first, reminder.recurrence);
+    final updatedReminder = reminder.copyWith(
+      nextDueDate: newDueDate,
+      ledger: newLedger,
+    );
 
-    FirebaseFirestore.instance.collection('reminders').doc(id).update({
-      'nextDueDate': newDueDate,
-      'ledger': newLedger,
-    });
+    FirebaseFirestore.instance.collection('reminders').doc(id).update(updatedReminder.toFirestore());
+    _scheduleNotification(updatedReminder);
   }
 
   Future<void> _navigateToEditScreen(String id, Reminder reminder) async {
@@ -286,12 +303,19 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       final newDueDate = result.ledger.isNotEmpty
           ? _calculateNextDueDate(result.ledger.last, result.recurrence)
           : _calculateNextDueDate(DateTime.now(), result.recurrence);
+      final updatedReminder = result.copyWith(nextDueDate: newDueDate);
 
       FirebaseFirestore.instance
           .collection('reminders')
           .doc(id)
-          .update(result.copyWith(nextDueDate: newDueDate).toFirestore());
+          .update(updatedReminder.toFirestore());
+      _scheduleNotification(updatedReminder);
     }
+  }
+
+  Future<void> _deleteReminder(String id) async {
+    await FirebaseFirestore.instance.collection('reminders').doc(id).delete();
+    await NotificationService().cancelNotification(id);
   }
 
   Future<void> _showAddReminderDialog(User user) async {
@@ -335,24 +359,24 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 ),
                 TextButton(
                   child: const Text('Add'),
-                  onPressed: () {
+                  onPressed: () async {
                     final recurrence = recurrenceController.text;
                     if (titleController.text.isNotEmpty &&
                         recurrence.isNotEmpty) {
                       final Map<String, Object>? rule =
                           _parseFrequency(recurrence);
                       if (rule != null) {
-                        FirebaseFirestore.instance.collection('reminders').add(
-                              Reminder(
-                                title: titleController.text,
-                                nextDueDate: _calculateNextDueDate(
-                                    DateTime.now(), recurrence),
-                                recurrence: recurrence,
-                                ledger: [],
-                                order: reminderCount,
-                                userId: user.uid,
-                              ).toFirestore(),
-                            );
+                        final newReminder = Reminder(
+                          title: titleController.text,
+                          nextDueDate: _calculateNextDueDate(
+                              DateTime.now(), recurrence),
+                          recurrence: recurrence,
+                          ledger: [],
+                          order: reminderCount,
+                          userId: user.uid,
+                        );
+                        final docRef = await FirebaseFirestore.instance.collection('reminders').add(newReminder.toFirestore());
+                        _scheduleNotification(newReminder.copyWith(id: docRef.id));
                         Navigator.of(context).pop();
                       } else {
                         setState(() {
@@ -751,6 +775,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       onMarkAsDone: _markAsDone,
       onLogDate: _logDate,
       onNavigateToEdit: _navigateToEditScreen,
+      onDelete: _deleteReminder,
     );
   }
 
@@ -772,10 +797,10 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       onMarkAsDone: _markAsDone,
       onLogDate: _logDate,
       onNavigateToEdit: _navigateToEditScreen,
+      onDelete: _deleteReminder,
     );
   }
 }
-
 class ReminderListItem extends StatelessWidget {
   final Reminder reminder;
   final String status;
@@ -784,6 +809,7 @@ class ReminderListItem extends StatelessWidget {
   final Function(String, Reminder) onMarkAsDone;
   final Function(String, Reminder) onLogDate;
   final Function(String, Reminder) onNavigateToEdit;
+  final Function(String) onDelete;
   final Widget? leading;
   final int? index;
 
@@ -796,6 +822,7 @@ class ReminderListItem extends StatelessWidget {
     required this.onMarkAsDone,
     required this.onLogDate,
     required this.onNavigateToEdit,
+    required this.onDelete,
     this.leading,
     this.index,
   });
@@ -844,8 +871,10 @@ class ReminderListItem extends StatelessWidget {
                           Text('Next: ${DateFormat('MMM d, yyyy').format(reminder.nextDueDate)}'),
                         ],
                       ),
-                      Row(
-                        children: [
+                      Wrap(
+                        spacing: 4.0,
+                        runSpacing: 4.0,
+                        children: <Widget>[
                           ElevatedButton(
                             onPressed: () => onLogDate(documentId, reminder),
                             style: elevatedButtonStyle,
@@ -854,6 +883,10 @@ class ReminderListItem extends StatelessWidget {
                           IconButton(
                             icon: const Icon(Icons.edit),
                             onPressed: () => onNavigateToEdit(documentId, reminder),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete),
+                            onPressed: () => onDelete(documentId),
                           ),
                         ],
                       ),
@@ -919,34 +952,35 @@ class ReminderListItem extends StatelessWidget {
                   ),
                   Expanded(
                       flex: 2, child: Text(reminder.recurrence)),
-                  SizedBox(
-                    width: 200,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Tooltip(
-                          message: 'Mark as done now',
-                          child: ElevatedButton(
-                              onPressed: () =>
-                                  onMarkAsDone(documentId, reminder),
-                              style: elevatedButtonStyle,
-                              child: const Text('Now')),
-                        ),
-                        const SizedBox(width: 5),
-                        Tooltip(
-                          message: 'Log a past completion',
-                          child: ElevatedButton(
-                              onPressed: () =>
-                                  onLogDate(documentId, reminder),
-                              style: elevatedButtonStyle,
-                              child: const Text('Log')),
-                        ),
-                        IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => onNavigateToEdit(
-                                documentId, reminder)),
-                      ],
-                    ),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 5.0,
+                    runSpacing: 4.0,
+                    children: <Widget>[
+                      Tooltip(
+                        message: 'Mark as done now',
+                        child: ElevatedButton(
+                            onPressed: () =>
+                                onMarkAsDone(documentId, reminder),
+                            style: elevatedButtonStyle,
+                            child: const Text('Now')),
+                      ),
+                      Tooltip(
+                        message: 'Log a past completion',
+                        child: ElevatedButton(
+                            onPressed: () =>
+                                onLogDate(documentId, reminder),
+                            style: elevatedButtonStyle,
+                            child: const Text('Log')),
+                      ),
+                      IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => onNavigateToEdit(
+                              documentId, reminder)),
+                      IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () => onDelete(documentId)),
+                    ],
                   ),
                 ],
               ),
@@ -957,4 +991,3 @@ class ReminderListItem extends StatelessWidget {
     );
   }
 }
-// analyzer refresh
