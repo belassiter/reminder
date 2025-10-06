@@ -29,4 +29,4 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./reminder_app/build/web/
-          server-dir: /reminders/
+          server-dir: /public_html/reminders/
