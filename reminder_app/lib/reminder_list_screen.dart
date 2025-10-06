@@ -9,7 +9,6 @@ import 'package:reminder_app/reminder.dart';
 import 'package:reminder_app/settings_screen.dart';
 import 'package:reminder_app/auth_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:reminder_app/login_screen.dart';
 import 'package:flutter_signin_button/flutter_signin_button.dart';
 
 class ReminderListScreen extends StatefulWidget {
@@ -958,3 +957,4 @@ class ReminderListItem extends StatelessWidget {
     );
   }
 }
+// analyzer refresh
